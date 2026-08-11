@@ -1,5 +1,15 @@
 # CHANGELOG.md
 
+## 2.1.0 (2026-08-11)
+
+Fixes:
+
+ - Fix `_wait_ack` to filter incoming ACK frames by the address a transmission was actually sent from, rather than the board's globally configured station — needed for source station/network overrides to work, but also more correct in general
+
+Features:
+
+ - Allow the source station and network of a single `TX`/`transmit()` operation to be overridden without changing the board's configured station (`SET_STATION`/`setEconetStation`)
+
 ## 2.0.20 (2023-06-11)
 
 Fixes:

@@ -16,8 +16,8 @@
 #include "./lib/b64/cdecode.h"
 
 #define VERSION_MAJOR           2
-#define VERSION_MINOR           0
-#define VERSION_REV             20
+#define VERSION_MINOR           1
+#define VERSION_REV             0
 #define VERSION_STR_MAXLEN      17
 
 #define TX_DATA_BUFFER_SZ       3500
@@ -104,6 +104,8 @@ typedef enum {
 typedef struct {
     uint8_t                 dest_station;
     uint8_t                 dest_network;
+    uint8_t                 src_station;
+    uint8_t                 src_network;
     uint8_t                 control_byte;
     uint8_t                 port;
     uint8_t                 data[TX_DATA_BUFFER_SZ];
@@ -317,6 +319,8 @@ void _core1_loop(void) {
                     econet_tx_result_t result = transmit(
                         received_command.tx.dest_station,
                         received_command.tx.dest_network,
+                        received_command.tx.src_station,
+                        received_command.tx.src_network,
                         received_command.tx.control_byte,
                         received_command.tx.port,
                         received_command.tx.data,
@@ -477,7 +481,40 @@ void _read_command_input(void) {
             cmd.tx.control_byte = strtol(strtok(NULL, delim), NULL, 10);
             cmd.tx.port = strtol(strtok(NULL, delim), NULL, 10);
             cmd.tx.data_len = _decode_base64(strtok(NULL, delim), cmd.tx.data);
-            cmd.tx.scout_extra_data_len = _decode_base64(strtok(NULL, delim), cmd.tx.scout_extra_data);
+
+            // Trailing fields are all optional. Their meaning is inferred from how many are
+            // present: scout extra data consumes exactly one token, the source station/network
+            // override exactly two, so the count (0-3) unambiguously identifies which are which.
+            char* trailing[3] = { NULL, NULL, NULL };
+            int trailing_count = 0;
+            char* trailing_tok;
+            while (trailing_count < 3 && (trailing_tok = strtok(NULL, delim)) != NULL) {
+                trailing[trailing_count++] = trailing_tok;
+            }
+
+            char* scout_extra_data_str = NULL;
+            char* src_station_str = NULL;
+            char* src_network_str = NULL;
+            switch (trailing_count) {
+                case 1:
+                    scout_extra_data_str = trailing[0];
+                    break;
+                case 2:
+                    src_station_str = trailing[0];
+                    src_network_str = trailing[1];
+                    break;
+                case 3:
+                    scout_extra_data_str = trailing[0];
+                    src_station_str = trailing[1];
+                    src_network_str = trailing[2];
+                    break;
+                default:
+                    break;
+            }
+
+            cmd.tx.scout_extra_data_len = _decode_base64(scout_extra_data_str, cmd.tx.scout_extra_data);
+            cmd.tx.src_station = src_station_str != NULL ? strtol(src_station_str, NULL, 10) : get_station();
+            cmd.tx.src_network = src_network_str != NULL ? strtol(src_network_str, NULL, 10) : 0x00;
         } else if (strcmp(ptr, CMD_BCAST) == 0) {
             cmd.type = PICONET_CMD_BCAST;
             cmd.tx.data_len = _decode_base64(strtok(NULL, delim), cmd.tx.data);

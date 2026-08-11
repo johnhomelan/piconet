@@ -199,6 +199,15 @@ export const setDebugEnabled = (enabled: boolean) => {
  * @param data            Buffer containing binary payload data to send.
  * @param extraScoutData  Optional extra data to include in the scout frame. This is useful for
  *                        a small number of special operations such as NOTIFY.
+ * @param sourceStation   Optional Econet station number to use as the source address for this
+ *                        transmission only (integer in range 1-254, inclusive). Overrides the
+ *                        station configured via {@link setEconetStation} for this transmission
+ *                        only, without changing the board's configured station; must be supplied
+ *                        together with `sourceNetwork`. If omitted, the board uses its configured
+ *                        station.
+ * @param sourceNetwork   Optional Econet network number to use as the source address for this
+ *                        transmission only (integer in range 0-255, inclusive). Must be supplied
+ *                        together with `sourceStation`. If omitted, defaults to `0`.
  *
  * @returns Describes the result of the operation. If the operation was successful then the
  *          `success` flag is set to `true`; otherwise the `description` field describes the
@@ -211,6 +220,8 @@ export const transmit = async (
   port: number,
   data: Buffer,
   extraScoutData?: Buffer,
+  sourceStation?: number,
+  sourceNetwork?: number,
 ): Promise<TxResultEvent> => {
   if (state !== ConnectionState.Connected) {
     throw new Error(`Cannot transmit data on device whilst in ${state} state`);
@@ -236,25 +247,51 @@ export const transmit = async (
     throw new Error('Data too long');
   }
 
+  if (
+    (typeof sourceStation === 'undefined') !==
+    (typeof sourceNetwork === 'undefined')
+  ) {
+    throw new Error(
+      'sourceStation and sourceNetwork must be supplied together',
+    );
+  }
+
+  if (
+    typeof sourceStation !== 'undefined' &&
+    typeof sourceNetwork !== 'undefined'
+  ) {
+    if (sourceStation < 1 || sourceStation >= 255) {
+      throw new Error('Invalid source station number');
+    }
+
+    if (sourceNetwork < 0 || sourceNetwork > 255) {
+      throw new Error('Invalid source network number');
+    }
+  }
+
   const queue = eventQueueCreate(event => event instanceof TxResultEvent);
   try {
+    const terms = [
+      `TX ${station} ${network} ${controlByte} ${port}`,
+      data.toString('base64'),
+    ];
+
     if (typeof extraScoutData !== 'undefined') {
       if (extraScoutData.length > config.maxScoutExtraDataLength) {
         throw new Error('Extra scout data too long');
       }
 
-      await writeToPort(
-        `TX ${station} ${network} ${controlByte} ${port} ${data.toString(
-          'base64',
-        )} ${extraScoutData.toString('base64')}\r`,
-      );
-    } else {
-      await writeToPort(
-        `TX ${station} ${network} ${controlByte} ${port} ${data.toString(
-          'base64',
-        )}\r`,
-      );
+      terms.push(extraScoutData.toString('base64'));
     }
+
+    if (
+      typeof sourceStation !== 'undefined' &&
+      typeof sourceNetwork !== 'undefined'
+    ) {
+      terms.push(`${sourceStation}`, `${sourceNetwork}`);
+    }
+
+    await writeToPort(`${terms.join(' ')}\r`);
 
     const result = await eventQueueWait(queue, 20000, 'TxResultEvent');
     return result as TxResultEvent;

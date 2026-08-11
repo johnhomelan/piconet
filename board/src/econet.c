@@ -142,8 +142,10 @@ econet_tx_result_t broadcast(
 }
 
 econet_tx_result_t transmit(
-        uint8_t         station,
-        uint8_t         network,
+        uint8_t         dest_station,
+        uint8_t         dest_network,
+        uint8_t         src_station,
+        uint8_t         src_network,
         uint8_t         control,
         uint8_t         port,
         const uint8_t*  data,
@@ -158,20 +160,20 @@ econet_tx_result_t transmit(
     if (data_frame_len > _tx_data_buffer_sz) {
         return PICONET_TX_RESULT_ERROR_OVERFLOW;
     }
-    _tx_data_buffer[0] = station;
-    _tx_data_buffer[1] = network;
-    _tx_data_buffer[2] = _listen_addresses[0];
-    _tx_data_buffer[3] = 0x00;
+    _tx_data_buffer[0] = dest_station;
+    _tx_data_buffer[1] = dest_network;
+    _tx_data_buffer[2] = src_station;
+    _tx_data_buffer[3] = src_network;
     memcpy(_tx_data_buffer + 4, data, data_len);
 
     size_t scout_frame_len = scout_extra_data_len + 6;
     if (scout_frame_len > _tx_scout_buffer_sz) {
         return PICONET_TX_RESULT_ERROR_OVERFLOW;
     }
-    _tx_scout_buffer[0] = station;
+    _tx_scout_buffer[0] = dest_station;
     _tx_scout_buffer[1] = 0x00;
-    _tx_scout_buffer[2] = _listen_addresses[0];
-    _tx_scout_buffer[3] = 0x00;
+    _tx_scout_buffer[2] = src_station;
+    _tx_scout_buffer[3] = src_network;
     _tx_scout_buffer[4] = control;
     _tx_scout_buffer[5] = port;
     memcpy(_tx_scout_buffer + 6, scout_extra_data, scout_extra_data_len);
@@ -183,7 +185,7 @@ econet_tx_result_t transmit(
         return scout_result;
     }
 
-    if (!_wait_ack(station, network, _listen_addresses[0], 0x00)) {
+    if (!_wait_ack(dest_station, dest_network, src_station, src_network)) {
         adlc_update_data_led(false);
         return PICONET_TX_RESULT_ERROR_NO_SCOUT_ACK;
     }
@@ -194,7 +196,7 @@ econet_tx_result_t transmit(
         return data_result;
     }
 
-    if (!_wait_ack(station, network, _listen_addresses[0], 0x00)) {
+    if (!_wait_ack(dest_station, dest_network, src_station, src_network)) {
         adlc_update_data_led(false);
         return PICONET_TX_RESULT_ERROR_NO_DATA_ACK;
     }
@@ -521,6 +523,7 @@ static econet_tx_result_t _tx_result_for_frame_status(tFrameWriteStatus status) 
 
 static bool _wait_ack(uint8_t from_station, uint8_t from_network, uint8_t to_station, uint8_t to_network) {
     t_frame_read_result ack_frame_result;
+    uint8_t ack_addr_filter[] = { to_station };
     while (true) {
         adlc_irq_reset();
 
@@ -528,7 +531,7 @@ static bool _wait_ack(uint8_t from_station, uint8_t from_network, uint8_t to_sta
             return false;
         }
 
-        ack_frame_result = _read_frame(_ack_buffer, _ack_buffer_sz, _listen_addresses, 1, 2000, false);
+        ack_frame_result = _read_frame(_ack_buffer, _ack_buffer_sz, ack_addr_filter, 1, 2000, false);
         if (ack_frame_result.status == FRAME_READ_OK) {
             break;
         }

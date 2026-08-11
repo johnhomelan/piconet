@@ -61,8 +61,10 @@ econet_tx_result_t      broadcast(
                             const uint8_t*  data,
                             size_t          data_len);
 econet_tx_result_t      transmit(
-                            uint8_t         station,
-                            uint8_t         network,
+                            uint8_t         dest_station,
+                            uint8_t         dest_network,
+                            uint8_t         src_station,
+                            uint8_t         src_network,
                             uint8_t         control,
                             uint8_t         port,
                             const uint8_t*  data,

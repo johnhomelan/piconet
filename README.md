@@ -122,9 +122,18 @@ There are three modes of operation:
 | `RESTART`            | Reinitialises ADLC by forcing low `!RST` signal (not normally required). |
 | `SET_MODE ${mode}`   | See _Operating modes_ section above. The `mode` parameter is a decimal integer where `0` == `STOP`, `1` == `LISTEN` and `2` == `MONITOR`.
 | `SET_STATION ${num}` | Sets the Econet station number for the board so that `RX_xxx` events are fired in response to frames relevant to this station. `num` should be specified as a decimal integer in range 1-254 (254 is usually reserved for an Econet fileserver). |
-| `TX ${station} ${network} ${controlByte} ${port} ${data}` | Sends an Econet packet (through the exchange of a sequence of frames between client and server which consitute the "four-way handshake": scout, scout ack, data, ack). All parameters are decimal integers except for `data` which is base64 encoded. `station` and `network` identify the destination station; `controlByte` and `port` help the recipient classify the incoming packet; `data` is the body of the message. A `TX_RESULT` event is generated in response to this command.
+| `TX ${station} ${network} ${controlByte} ${port} ${data} [${scoutExtraData}] [${srcStation} ${srcNetwork}]` | Sends an Econet packet (through the exchange of a sequence of frames between client and server which consitute the "four-way handshake": scout, scout ack, data, ack). All parameters are decimal integers except for `data`/`scoutExtraData` which are base64 encoded. `station` and `network` identify the destination station; `controlByte` and `port` help the recipient classify the incoming packet; `data` is the body of the message. `scoutExtraData` is optional extra data to include in the scout frame, useful for a small number of special operations such as `NOTIFY`. `srcStation`/`srcNetwork` are also optional and, if given, override the source station/network stamped on the outgoing frames for this transmission only, without changing the board's configured station (see `SET_STATION`); if omitted, the configured station and network `0` are used, as before this feature existed. See note below on how these trailing fields are distinguished from one another. A `TX_RESULT` event is generated in response to this command.
 | `BCAST ${data}`       | The single `data` parameter is base64 encoded. This shall be sent with destination station/network octets both set to `0xff` and the configured econet station number as the source address. A `TX_RESULT` event is generated in response to this command. |
 | `TEST`                | Used to test hardware (with the device disconnected from the Econet, and generally the ADF10 Econet module too). See the [Hardware testing](https://github.com/jprayner/piconet/tree/main/board#hardware-testing) section of the documentation.|
+
+`scoutExtraData` and `srcStation`/`srcNetwork` are all optional trailing fields on `TX`, so the firmware infers which are present from how many trailing tokens follow `data`, since `srcStation`/`srcNetwork` must be usable whether or not `scoutExtraData` is also given:
+
+| Trailing tokens after `data` | Meaning |
+| --- | --- |
+| _(none)_ | No scout extra data; source station/network not overridden. |
+| `${scoutExtraData}` | Scout extra data only. |
+| `${srcStation} ${srcNetwork}` | Source station/network override only, no scout extra data. |
+| `${scoutExtraData} ${srcStation} ${srcNetwork}` | Both scout extra data and source station/network override. |
 
 ### Events
 

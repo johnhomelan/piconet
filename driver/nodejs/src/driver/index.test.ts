@@ -9,6 +9,7 @@ import {
   eventQueueCreate,
   eventQueueWait,
   eventQueueDestroy,
+  transmit,
 } from '.';
 import { EconetEvent } from '../types/econetEvent';
 import { StatusEvent } from '../types/statusEvent';
@@ -233,12 +234,116 @@ describe('driver', () => {
     await close();
   });
 
-  // TODO: test transmit
+  it('should send TX without source station/network when not supplied', async () => {
+    mockStatusEventFromBoard(0);
+    await connect();
+
+    mockTxResultEventFromBoard('OK');
+    await transmit(2, 0, 0x80, 0, Buffer.from('data'));
+    expect(writeToPortMock).toHaveBeenCalledWith('TX 2 0 128 0 ZGF0YQ==\r');
+    await close();
+  });
+
+  it('should send TX with extra scout data but no source override', async () => {
+    mockStatusEventFromBoard(0);
+    await connect();
+
+    mockTxResultEventFromBoard('OK');
+    await transmit(2, 0, 0x80, 0, Buffer.from('data'), Buffer.from('extra'));
+    expect(writeToPortMock).toHaveBeenCalledWith(
+      'TX 2 0 128 0 ZGF0YQ== ZXh0cmE=\r',
+    );
+    await close();
+  });
+
+  it('should send TX with source station/network override and no extra scout data', async () => {
+    mockStatusEventFromBoard(0);
+    await connect();
+
+    mockTxResultEventFromBoard('OK');
+    await transmit(2, 0, 0x80, 0, Buffer.from('data'), undefined, 99, 3);
+    expect(writeToPortMock).toHaveBeenCalledWith(
+      'TX 2 0 128 0 ZGF0YQ== 99 3\r',
+    );
+    await close();
+  });
+
+  it('should send TX with both extra scout data and source station/network override', async () => {
+    mockStatusEventFromBoard(0);
+    await connect();
+
+    mockTxResultEventFromBoard('OK');
+    await transmit(
+      2,
+      0,
+      0x80,
+      0,
+      Buffer.from('data'),
+      Buffer.from('extra'),
+      99,
+      3,
+    );
+    expect(writeToPortMock).toHaveBeenCalledWith(
+      'TX 2 0 128 0 ZGF0YQ== ZXh0cmE= 99 3\r',
+    );
+    await close();
+  });
+
+  it('should throw error if only sourceStation is supplied to transmit', async () => {
+    mockStatusEventFromBoard(0);
+    await connect();
+
+    await expect(
+      transmit(2, 0, 0x80, 0, Buffer.from('data'), undefined, 99),
+    ).rejects.toThrow(
+      'sourceStation and sourceNetwork must be supplied together',
+    );
+    await close();
+  });
+
+  it('should throw error if only sourceNetwork is supplied to transmit', async () => {
+    mockStatusEventFromBoard(0);
+    await connect();
+
+    await expect(
+      transmit(2, 0, 0x80, 0, Buffer.from('data'), undefined, undefined, 3),
+    ).rejects.toThrow(
+      'sourceStation and sourceNetwork must be supplied together',
+    );
+    await close();
+  });
+
+  it('should throw error if transmit passed invalid sourceStation', async () => {
+    mockStatusEventFromBoard(0);
+    await connect();
+
+    await expect(
+      transmit(2, 0, 0x80, 0, Buffer.from('data'), undefined, 255, 0),
+    ).rejects.toThrow('Invalid source station number');
+    await close();
+  });
+
+  it('should throw error if transmit passed invalid sourceNetwork', async () => {
+    mockStatusEventFromBoard(0);
+    await connect();
+
+    await expect(
+      transmit(2, 0, 0x80, 0, Buffer.from('data'), undefined, 99, 256),
+    ).rejects.toThrow('Invalid source network number');
+    await close();
+  });
 });
 
 const mockStatusEventFromBoard = (rxMode: number) => {
   setTimeout(() => {
     const dataHandlerFunc = openPortMock.mock.calls[0][0];
     dataHandlerFunc(`STATUS ${PKG_VERSION} 2 00 ${rxMode}\r`);
+  }, 100);
+};
+
+const mockTxResultEventFromBoard = (result: string) => {
+  setTimeout(() => {
+    const dataHandlerFunc = openPortMock.mock.calls[0][0];
+    dataHandlerFunc(`TX_RESULT ${result}`);
   }, 100);
 };
